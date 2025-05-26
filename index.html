@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iframe 태그 테스트 도구</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Pretendard', 'Noto Sans', sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f4f6f8;
+      color: #333;
+    }
+    header {
+      background: #006d77;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .panel {
+      padding: 1rem;
+      overflow-y: auto;
+      border-right: 1px solid #ccc;
+      background-color: white;
+    }
+    .panel-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .input-panel {
+      width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    textarea, input, select {
+      width: 100%;
+      padding: 0.5rem;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    .preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid #ccc;
+      padding: 1rem;
+      background: #f0f0f0;
+      position: relative;
+      resize: both;
+      overflow: auto;
+    }
+    iframe {
+      border: 1px solid #006d77;
+      transition: all 0.3s ease;
+      width: 100%;
+      height: 100%;
+    }
+    .status {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .logs {
+      padding: 1rem;
+      background: #fafafa;
+      font-family: monospace;
+      font-size: 0.85rem;
+      height: 150px;
+      overflow-y: auto;
+      border-top: 1px solid #ccc;
+    }
+    .error {
+      color: #e63946;
+      font-size: 0.9rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      background: #008891;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005f73;
+    }
+    .fullscreen-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 3px;
+      padding: 4px 8px;
+      color: white;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .iframe-box {
+      border: 1px solid #ccc;
+      padding: 0.5rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <header>&lt;iframe&gt; 테스트 도구</header>
+  <div class="container">
+    <div class="panel input-panel">
+      <label for="iframeInput">&lt;iframe&gt; 태그 입력</label>
+      <textarea id="iframeInput" placeholder="<iframe src='https://example.com' width='600' height='400'></iframe>"></textarea>
+
+      <label for="presetSelect">프리셋 선택</label>
+      <select id="presetSelect">
+        <option value="">프리셋을 선택하세요</option>
+        <option value="<iframe src='https://example.com' width='600' height='400'></iframe>">기본 src</option>
+        <option value="<iframe src='https://example.com' width='600' height='400' sandbox></iframe>">샌드박스 적용</option>
+        <option value="<iframe src='https://example.com' width='600' height='400' scrolling='no'></iframe>">스크롤바 없음</option>
+      </select>
+
+      <label for="configName">설정 이름</label>
+      <input id="configName" placeholder="예: 테스트1">
+      <button id="saveConfig">설정 저장</button>
+      <select id="loadSelect"></select>
+      <button id="loadConfig">불러오기</button>
+      <button id="deleteConfig">삭제</button>
+
+      <button id="addIframe">아이프레임 추가</button>
+      <div id="iframeList"></div>
+
+      <div id="errorMessage" class="error"></div>
+      <button id="reloadBtn">재시작</button>
+    </div>
+    <div class="panel-right">
+      <div class="preview" id="previewContainer">
+        <div class="fullscreen-btn" id="fullscreenToggle">전체화면</div>
+        <div id="statusMessage" class="status"></div>
+        <div id="iframeContainer" style="width:100%;height:100%;"></div>
+      </div>
+      <div class="logs" id="logOutput">콘솔 로그 출력 영역</div>
+    </div>
+  </div>
+  <script>
+    const iframeInput = document.getElementById('iframeInput');
+    const iframeContainer = document.getElementById('iframeContainer');
+    const statusMessage = document.getElementById('statusMessage');
+    const errorMessage = document.getElementById('errorMessage');
+    const reloadBtn = document.getElementById('reloadBtn');
+    const previewContainer = document.getElementById('previewContainer');
+    const fullscreenBtn = document.getElementById('fullscreenToggle');
+    const presetSelect = document.getElementById('presetSelect');
+    const addIframeBtn = document.getElementById('addIframe');
+    const iframeList = document.getElementById('iframeList');
+    const saveBtn = document.getElementById('saveConfig');
+    const loadBtn = document.getElementById('loadConfig');
+    const deleteBtn = document.getElementById('deleteConfig');
+    const loadSelect = document.getElementById('loadSelect');
+    const configName = document.getElementById('configName');
+
+    function clearIframe() {
+      iframeContainer.innerHTML = '';
+      statusMessage.textContent = '';
+    }
+
+    function renderIframe() {
+      const html = iframeInput.value.trim();
+      clearIframe();
+
+      if (!html.startsWith('<iframe') || !html.includes('src=')) {
+        errorMessage.textContent = '유효한 iframe 태그를 입력해주세요.';
+        return;
+      } else {
+        errorMessage.textContent = '';
+      }
+
+      try {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        const iframe = wrapper.querySelector('iframe');
+        if (!iframe) throw new Error();
+
+        const startTime = performance.now();
+        statusMessage.textContent = '로딩 중...';
+        statusMessage.style.color = '#2196F3';
+
+        iframe.onload = () => {
+          const endTime = performance.now();
+          statusMessage.textContent = `로드 성공 (로딩 시간: ${(endTime - startTime).toFixed(2)}ms)`;
+          statusMessage.style.color = '#2a9d8f';
+        };
+        iframe.onerror = () => {
+          statusMessage.textContent = '로드 실패 (보안 정책 또는 URL 문제)';
+          statusMessage.style.color = '#e63946';
+        };
+
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframeContainer.appendChild(iframe);
+      } catch (e) {
+        errorMessage.textContent = '유효한 iframe 태그를 입력해주세요.';
+      }
+    }
+
+    function updateConfigList() {
+      loadSelect.innerHTML = '';
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('iframeConfig-')) {
+          const name = key.replace('iframeConfig-', '');
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = name;
+          loadSelect.appendChild(option);
+        }
+      });
+    }
+
+    function saveConfig() {
+      const name = configName.value.trim();
+      if (!name) {
+        alert('설정 이름을 입력하세요.');
+        return;
+      }
+      localStorage.setItem('iframeConfig-' + name, iframeInput.value);
+      updateConfigList();
+      alert('저장되었습니다.');
+    }
+
+    function loadConfig() {
+      const key = loadSelect.value;
+      if (key && localStorage.getItem(key)) {
+        iframeInput.value = localStorage.getItem(key);
+        renderIframe();
+      }
+    }
+
+    function deleteConfig() {
+      const key = loadSelect.value;
+      if (key && confirm('삭제하시겠습니까?')) {
+        localStorage.removeItem(key);
+        updateConfigList();
+      }
+    }
+
+    presetSelect.addEventListener('change', (e) => {
+      if (e.target.value) {
+        iframeInput.value = e.target.value;
+        renderIframe();
+      }
+    });
+
+    addIframeBtn.addEventListener('click', () => {
+      const container = document.createElement('div');
+      container.className = 'iframe-box';
+
+      const label = document.createElement('div');
+      label.textContent = '추가된 iframe:';
+
+      const iframePreview = document.createElement('div');
+      iframePreview.innerHTML = iframeInput.value;
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '삭제';
+      delBtn.style.marginTop = '0.5rem';
+      delBtn.onclick = () => container.remove();
+
+      container.appendChild(label);
+      container.appendChild(iframePreview);
+      container.appendChild(delBtn);
+
+      iframeList.appendChild(container);
+    });
+
+    reloadBtn.addEventListener('click', renderIframe);
+    iframeInput.addEventListener('input', renderIframe);
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) previewContainer.requestFullscreen();
+      else document.exitFullscreen();
+    });
+    saveBtn.addEventListener('click', saveConfig);
+    loadBtn.addEventListener('click', loadConfig);
+    deleteBtn.addEventListener('click', deleteConfig);
+
+    updateConfigList();
+    renderIframe();
+  </script>
+</body>
+</html>
